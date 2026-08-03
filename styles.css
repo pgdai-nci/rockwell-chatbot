@@ -19,16 +19,28 @@ html, body { height: 100%; }
 
 body {
   font-family: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
-  background: radial-gradient(1200px 600px at 80% -10%, #eaf1f8 0%, var(--bg) 55%);
+  background:
+    radial-gradient(1000px 520px at 85% -10%, #eaf1f8 0%, transparent 55%),
+    radial-gradient(800px 480px at -10% 110%, #eef4e2 0%, transparent 55%),
+    var(--bg);
   color: var(--ink);
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 24px 16px;
 }
 
 .app {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  max-width: 860px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: 720px;
+  height: min(680px, 88vh);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(14, 42, 71, 0.18), 0 4px 14px rgba(14, 42, 71, 0.08);
+  overflow: hidden;
 }
 
 /* Header */
@@ -146,8 +158,6 @@ body {
 /* Composer */
 .composer { border-top: 1px solid var(--line); background: var(--card); padding: 10px 16px 14px; }
 
-.note { font-size: 11.5px; color: var(--muted); text-align: center; margin-bottom: 8px; }
-
 .input-row { display: flex; gap: 10px; align-items: flex-end; }
 
 textarea {
@@ -182,4 +192,5 @@ textarea:focus { border-color: var(--accent-dark); box-shadow: 0 0 0 3px rgba(25
   .msg { max-width: 88%; }
   .header { padding: 12px 14px; }
   .chat { padding: 14px; }
+  .app { height: min(680px, 94vh); }
 }
