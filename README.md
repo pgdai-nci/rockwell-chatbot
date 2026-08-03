@@ -13,8 +13,16 @@ availability, all from one chat window.
 The chatbot acts as Aria Stone, the Rockwell Site Survey & Engineering Services
 Advisor. It answers questions about the services catalogue, quotes fees, explains
 availability and slots, and points out when a service is not in the catalogue.
-Every answer is grounded in the **live Google Sheet**, fetched at the moment of
-each question. There is no hardcoded or cached catalogue.
+Every answer is grounded in two **live sources**, both fetched at the moment of
+each question and combined into a single reply:
+
+1. **Google Sheet** - the services catalogue (fees, regions, slots, offers).
+2. **USGS Earthquake API** - recent seismic activity in the Ireland region,
+   used as evidence for structural and pre-purchase inspections: an event near a
+   customer's area justifies prioritising a survey, and "no recent activity" is
+   plain reassurance.
+
+There is no hardcoded or cached catalogue.
 
 ## Architecture
 
@@ -22,8 +30,10 @@ each question. There is no hardcoded or cached catalogue.
 GitHub Pages (static frontend)          Cloudflare Worker (proxy)          Gemini API
 index.html, styles.css, app.js  ->  worker/worker.js (secret key) ->  gemini-3.5-flash-lite
                                           |
-                                          v
-                          Live Google Sheet (published CSV, fetched per request)
+                          +---------------+---------------+
+                          v                               v
+          Live Google Sheet (catalogue, CSV)   USGS Earthquake API (seismic, JSON)
+          fetched per request                 fetched per request
 ```
 
 1. **Frontend** (this repo, root files): a no-build chat UI served from GitHub Pages.
@@ -34,9 +44,12 @@ index.html, styles.css, app.js  ->  worker/worker.js (secret key) ->  gemini-3.5
    conversation to Gemini, maps errors, and enforces the free-tier limit of 15
    requests per minute.
 3. **Live data**: on every request the Worker fetches the Google Sheet as CSV
-   (`gviz/tq?tqx=out:csv`), parses it, and injects the current rows into the
-   model's system instruction. Nothing is copied, cached, or stored. If the sheet
-   is unreachable, the chatbot says so instead of answering from stale data.
+   (`gviz/tq?tqx=out:csv`) and, in parallel, the USGS earthquake feed for the
+   Ireland region (past 90 days, magnitude >= 1.0, mapped to the nearest Rockwell
+   region). Both are injected into the model's system instruction. Nothing is
+   copied, cached, or stored. If the sheet is unreachable the chatbot says so
+   instead of answering from stale data; if USGS is unreachable it says it could
+   not check seismic activity and still answers from the catalogue.
 4. **LLM**: Google Gemini via the `:generateContent` endpoint (per the Google AI
    Studio instructions: lightweight model, chat loop, free tier). The model is
    `gemini-3.5-flash-lite`; the original 2.5 Flash in the instructions is no
