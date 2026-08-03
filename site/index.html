@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rockwell Site Surveys &amp; Engineering | Advisor</title>
+  <meta name="description" content="Rockwell Site Surveys & Engineering chatbot. Find the right site survey or engineering service, check fees, regions, and slot availability." />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='16' fill='%230e2a47'/><path d='M28 70V38h10l12 16 12-16h10v32H62V52L50 68 38 52v18z' fill='%23ffb400'/></svg>" />
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="brand">
+        <div class="brand-mark">R</div>
+        <div class="brand-text">
+          <h1>ROCKWELL</h1>
+          <span>Site Surveys &amp; Engineering</span>
+        </div>
+      </div>
+      <div class="status"><span class="dot"></span> Advisor online</div>
+    </header>
+
+    <main class="chat" id="chat" aria-live="polite">
+      <section class="welcome" id="welcome">
+        <div class="welcome-card">
+          <h2>Welcome to the Rockwell Advisor</h2>
+          <p>
+            I help you find the right site survey or engineering service for your
+            plant, with fees, regions, and available slots. Ask me anything about
+            the catalogue, or start with one of these:
+          </p>
+          <div class="chips" id="chips">
+            <button class="chip" data-q="What site survey services do you offer?">What surveys do you offer?</button>
+            <button class="chip" data-q="How much does a Standard Site Survey cost?">Standard Site Survey price</button>
+            <button class="chip" data-q="What slots are available this month for a Comprehensive Site Survey in the metro region?">Slot availability</button>
+            <button class="chip" data-q="We have an unplanned outage. Can you help?">Emergency survey</button>
+          </div>
+        </div>
+      </section>
+      <div id="messages"></div>
+    </main>
+
+    <footer class="composer">
+      <div class="note">
+        Free-tier Gemini: up to 15 messages per minute. Answers are indicative, not a quotation.
+      </div>
+      <div class="input-row">
+        <textarea id="input" rows="1" placeholder="Ask about surveys, fees, regions, or slots..." aria-label="Your message"></textarea>
+        <button id="send" aria-label="Send message">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M3.4 20.4l17.4-8.4L3.4 3.6l.02 6.5 12.4 2.5-12.4 2.5z"/></svg>
+        </button>
+      </div>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
