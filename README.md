@@ -20,10 +20,10 @@ capacity and booking rules, and routes emergencies to the priority lane.
 
 ```
 GitHub Pages (static frontend)          Cloudflare Worker (proxy)          Gemini API
-site/index.html, styles.css, app.js  ->  worker/worker.js (secret key) ->  gemini-3.5-flash-lite
+index.html, styles.css, app.js  ->  worker/worker.js (secret key) ->  gemini-3.5-flash-lite
 ```
 
-1. **Frontend** (this repo, `site/`): a no-build chat UI served from GitHub Pages.
+1. **Frontend** (this repo, root files): a no-build chat UI served from GitHub Pages.
    It keeps the conversation history in the browser and sends the full thread to
    the Worker on each message, so the model always sees context.
 2. **Proxy** (`worker/worker.js`): a Cloudflare Worker that holds the Gemini API
@@ -59,8 +59,8 @@ They read like colleagues on one team: shared values, distinct lanes, no overlap
 ```
 agents/                 five custom agent personas
 knowledge/              the catalogue knowledge base (single source of truth)
-site/                   GitHub Pages frontend (HTML, CSS, JS)
 worker/                 Cloudflare Worker proxy
+index.html, styles.css, app.js   GitHub Pages frontend (served from the repo root)
 agent-persona-template.md   the persona scaffold (source)
 five-innovators-spec.md     the five-innovators spec (source)
 ```
@@ -76,9 +76,9 @@ npx wrangler deploy worker/worker.js --name rockwell-api
 npx wrangler secret put GEMINI_API_KEY --name rockwell-api
 ```
 
-The frontend is plain static files; open `site/index.html` locally or serve from
-any static host. Set `WORKER_URL` in `site/app.js` to your worker's
-`https://rockwell-api.<subdomain>.workers.dev` URL.
+The frontend is plain static files served from the repo root; open `index.html`
+locally or serve from any static host. Set `WORKER_URL` in `app.js` to your
+worker's `https://rockwell-api.<subdomain>.workers.dev` URL.
 
 ## Notes
 
