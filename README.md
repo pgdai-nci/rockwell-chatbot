@@ -20,7 +20,7 @@ capacity and booking rules, and routes emergencies to the priority lane.
 
 ```
 GitHub Pages (static frontend)          Cloudflare Worker (proxy)          Gemini API
-site/index.html, styles.css, app.js  ->  worker/worker.js (secret key) ->  gemini-2.5-flash
+site/index.html, styles.css, app.js  ->  worker/worker.js (secret key) ->  gemini-3.5-flash-lite
 ```
 
 1. **Frontend** (this repo, `site/`): a no-build chat UI served from GitHub Pages.
@@ -31,7 +31,9 @@ site/index.html, styles.css, app.js  ->  worker/worker.js (secret key) ->  gemin
    conversation to Gemini, maps errors, and enforces the free-tier limit of 15
    requests per minute.
 3. **LLM**: Google Gemini via the `:generateContent` endpoint (per the Google AI
-   Studio instructions: lightweight model, chat loop, free tier).
+   Studio instructions: lightweight model, chat loop, free tier). The model is
+   `gemini-3.5-flash-lite`; the original 2.5 Flash in the instructions is no
+   longer available to new keys, so the current lightweight free-tier model is used.
 
 The system prompt embeds Aria's persona and the full catalogue knowledge base
 (`knowledge/rockwell-site-surveys.md`), so the model answers from a single source

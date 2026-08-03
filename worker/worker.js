@@ -1,9 +1,10 @@
 /* Rockwell chatbot API proxy.
    GitHub Pages frontend (static) cannot safely hold a Gemini API key, so this
    Worker sits between the page and the Gemini API: it holds the key as a secret
-   binding, adds CORS, forwards the conversation, and guards the free tier. */
+   binding (GEMINI_API_KEY), adds CORS, forwards the conversation, and guards the
+   free tier. */
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-3.5-flash-lite';
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL + ':generateContent';
 
 const RATE_LIMIT = 15;          // free-tier Gemini ceiling
@@ -76,7 +77,9 @@ async function handleRequest(request) {
       generationConfig: { maxOutputTokens: 1200, temperature: 0.6 },
     };
     if (system_instruction) {
-      body.system_instruction = system_instruction;
+      body.system_instruction = typeof system_instruction === 'string'
+        ? { parts: [{ text: system_instruction }] }
+        : system_instruction;
     }
 
     const url = GEMINI_URL + '?key=' + encodeURIComponent(apiKey);
