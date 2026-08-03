@@ -11,16 +11,19 @@ availability, all from one chat window.
 ## What it does
 
 The chatbot acts as Aria Stone, the Rockwell Site Survey & Engineering Services
-Advisor. It answers questions about the services catalogue (desk, standard,
-comprehensive, and emergency site surveys plus six engineering studies), quotes
-indicative fees, explains the three regions and their travel rules, checks slot
-capacity and booking rules, and routes emergencies to the priority lane.
+Advisor. It answers questions about the services catalogue, quotes fees, explains
+availability and slots, and points out when a service is not in the catalogue.
+Every answer is grounded in the **live Google Sheet**, fetched at the moment of
+each question. There is no hardcoded or cached catalogue.
 
 ## Architecture
 
 ```
 GitHub Pages (static frontend)          Cloudflare Worker (proxy)          Gemini API
 index.html, styles.css, app.js  ->  worker/worker.js (secret key) ->  gemini-3.5-flash-lite
+                                          |
+                                          v
+                          Live Google Sheet (published CSV, fetched per request)
 ```
 
 1. **Frontend** (this repo, root files): a no-build chat UI served from GitHub Pages.
@@ -30,14 +33,15 @@ index.html, styles.css, app.js  ->  worker/worker.js (secret key) ->  gemini-3.5
    key as a secret binding (never shipped to the browser), adds CORS, forwards the
    conversation to Gemini, maps errors, and enforces the free-tier limit of 15
    requests per minute.
-3. **LLM**: Google Gemini via the `:generateContent` endpoint (per the Google AI
+3. **Live data**: on every request the Worker fetches the Google Sheet as CSV
+   (`gviz/tq?tqx=out:csv`), parses it, and injects the current rows into the
+   model's system instruction. Nothing is copied, cached, or stored. If the sheet
+   is unreachable, the chatbot says so instead of answering from stale data.
+4. **LLM**: Google Gemini via the `:generateContent` endpoint (per the Google AI
    Studio instructions: lightweight model, chat loop, free tier). The model is
    `gemini-3.5-flash-lite`; the original 2.5 Flash in the instructions is no
    longer available to new keys, so the current lightweight free-tier model is used.
 
-The system prompt embeds Aria's persona and the full catalogue knowledge base
-(`knowledge/rockwell-site-surveys.md`), so the model answers from a single source
-of truth and always labels prices as indicative.
 
 ## The five custom agents
 
@@ -58,12 +62,15 @@ They read like colleagues on one team: shared values, distinct lanes, no overlap
 
 ```
 agents/                 five custom agent personas
-knowledge/              the catalogue knowledge base (single source of truth)
-worker/                 Cloudflare Worker proxy
+worker/                 Cloudflare Worker proxy (fetches the live Google Sheet)
 index.html, styles.css, app.js   GitHub Pages frontend (served from the repo root)
 agent-persona-template.md   the persona scaffold (source)
 five-innovators-spec.md     the five-innovators spec (source)
 ```
+
+The live catalogue is a Google Sheet (single source of truth). The Worker fetches
+it on every request; see `SHEET_URL` in `worker/worker.js` to point it at a
+different sheet.
 
 ## Running it yourself
 

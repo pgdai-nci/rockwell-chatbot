@@ -1,11 +1,18 @@
 /* Rockwell chatbot API proxy.
-   GitHub Pages frontend (static) cannot safely hold a Gemini API key, so this
-   Worker sits between the page and the Gemini API: it holds the key as a secret
-   binding (GEMINI_API_KEY), adds CORS, forwards the conversation, and guards the
-   free tier. */
+   Serves the GitHub Pages frontend. Holds the Gemini API key as a secret
+   binding (GEMINI_API_KEY), adds CORS, and guards the free tier.
+
+   Knowledge: there is no hardcoded catalogue. On every request this Worker
+   fetches the live Google Sheet (published as CSV) and injects its current
+   contents into the model's system instruction, so the chatbot answers only
+   from data fetched at the moment of each question. Nothing is copied, cached,
+   or stored. */
 
 const GEMINI_MODEL = 'gemini-3.5-flash-lite';
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL + ':generateContent';
+
+/* Live Google Sheet, served as CSV by Google. Read fresh on every request. */
+const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1UtwQFTXwg3YNj5OYP3MYWvanMPdG97kk7UNRthwEXRU/gviz/tq?tqx=out:csv';
 
 const RATE_LIMIT = 15;          // free-tier Gemini ceiling
 const RATE_WINDOW_MS = 60000;
@@ -17,8 +24,23 @@ const CORS_HEADERS = {
   'Access-Control-Max-Age': '86400',
 };
 
-/* Simple in-memory per-IP limiter. In-memory state is per-isolate, so this is
-   a light guard, not a hard guarantee; the frontend enforces the same limit. */
+/* Static persona and rules. No catalogue data lives here. */
+const PERSONA = [
+  'You are Aria Stone, the customer-facing Site Survey & Engineering Services Advisor for Rockwell Site Surveys & Engineering.',
+  'You are an AI colleague, not a human. You answer strictly from the live catalogue data block at the end of this instruction.',
+  '',
+  'Rules:',
+  '- Answer ONLY from the live data block. Never invent services, prices, availability, slots, offers, or details that are not present in it.',
+  '- If the answer is not in the data, say you cannot find it in the current catalogue and ask one focused question to narrow it down.',
+  '- Recommend the service that best fits the customer\'s stated need based only on the data; never upsell beyond what the data supports.',
+  '- Quote fees exactly as shown in the data and note they are indicative; the final quotation is confirmed by the Rockwell team.',
+  '- Use the "description", "special_offer", and "availability" columns to give useful, data-backed detail.',
+  '- Keep replies tight and structured: a short answer, the relevant figures from the data, one clear next step.',
+  '- Answer in the customer\'s language, defaulting to English.',
+  '- Never use em dashes. Use colons, semicolons, commas, full stops, or parentheses instead.',
+  '',
+].join('\n');
+
 const buckets = new Map();
 
 function checkLimit(ip) {
@@ -38,6 +60,66 @@ function jsonResponse(body, status = 200) {
     status,
     headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
   });
+}
+
+/* Minimal RFC-4180-style CSV parser (handles quotes and embedded commas). */
+function parseCSV(text) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += c;
+      }
+    } else if (c === '"') {
+      inQuotes = true;
+    } else if (c === ',') {
+      row.push(field);
+      field = '';
+    } else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(field);
+      field = '';
+      if (row.some(cell => cell !== '')) rows.push(row);
+      row = [];
+    } else {
+      field += c;
+    }
+  }
+  if (field !== '' || row.length) {
+    row.push(field);
+    if (row.some(cell => cell !== '')) rows.push(row);
+  }
+  return rows;
+}
+
+async function fetchSheetRows() {
+  const res = await fetch(SHEET_URL, { headers: { 'Accept': 'text/csv' } });
+  if (!res.ok) {
+    throw new Error('The live services sheet is unreachable right now (HTTP ' + res.status + '). Please try again shortly.');
+  }
+  const text = await res.text();
+  const rows = parseCSV(text);
+  if (rows.length < 2) {
+    throw new Error('The live services sheet returned no catalogue rows. Please check the sheet and try again.');
+  }
+  return rows;
+}
+
+function buildSheetText(rows) {
+  return rows
+    .map(row => row.map(cell => String(cell == null ? '' : cell).trim()).join(' | '))
+    .join('\n');
 }
 
 addEventListener('fetch', event => {
@@ -66,21 +148,28 @@ async function handleRequest(request) {
   }
 
   try {
-    const { contents, system_instruction } = await request.json();
+    const { contents } = await request.json();
 
     if (!contents || !Array.isArray(contents) || contents.length === 0) {
       return jsonResponse({ error: 'Missing or invalid contents array.' }, 400);
     }
 
+    /* Fetch the live sheet data for THIS question. No caching. */
+    const rows = await fetchSheetRows();
+    const sheetText = buildSheetText(rows);
+    const fetchedAt = new Date().toISOString();
+
+    const systemInstruction = PERSONA +
+      '=== LIVE CATALOGUE DATA ===\n' +
+      'Fetched from the Google Sheet at ' + fetchedAt + '.\n' +
+      'Columns: service_id | service_name | category | region | fee_eur | duration_days | requires_site_visit | availability | slots_this_week | special_offer | description\n' +
+      sheetText;
+
     const body = {
       contents,
-      generationConfig: { maxOutputTokens: 1200, temperature: 0.6 },
+      generationConfig: { maxOutputTokens: 1200, temperature: 0.4 },
+      system_instruction: { parts: [{ text: systemInstruction }] },
     };
-    if (system_instruction) {
-      body.system_instruction = typeof system_instruction === 'string'
-        ? { parts: [{ text: system_instruction }] }
-        : system_instruction;
-    }
 
     const url = GEMINI_URL + '?key=' + encodeURIComponent(apiKey);
     const geminiRes = await fetch(url, {
