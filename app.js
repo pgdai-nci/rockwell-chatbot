@@ -58,14 +58,17 @@ function setBusy(busy) {
   $input.disabled = busy;
 }
 
-async function callWorker(contents) {
+async function callWorker(contents, systemInstruction) {
   if (!WORKER_URL || WORKER_URL.includes('YOUR_SUBDOMAIN')) {
     throw new Error('The chatbot is not fully configured yet: the API proxy URL is missing.');
   }
   const res = await fetch(WORKER_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents }),
+    body: JSON.stringify({
+      contents,
+      system_instruction: { parts: [{ text: systemInstruction }] },
+    }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -98,7 +101,8 @@ async function send(text) {
   setBusy(true);
   try {
     recordRequest();
-    const reply = await callWorker(history);
+    const systemInstruction = await ROCKWELL.buildSystemInstruction();
+    const reply = await callWorker(history, systemInstruction);
     history.push({ role: 'model', parts: [{ text: reply }] });
     typing.remove();
     addMessage('bot', reply);

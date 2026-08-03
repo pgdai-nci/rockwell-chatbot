@@ -27,34 +27,34 @@ There is no hardcoded or cached catalogue.
 ## Architecture
 
 ```
-GitHub Pages (static frontend)          Cloudflare Worker (proxy)          Gemini API
-index.html, styles.css, app.js  ->  worker/worker.js (secret key) ->  gemini-3.5-flash-lite
-                                          |
-                          +---------------+---------------+
-                          v                               v
-          Live Google Sheet (catalogue, CSV)   USGS Earthquake API (seismic, JSON)
-          fetched per request                 fetched per request
+GitHub Pages (static frontend)                      Cloudflare Worker (thin proxy)      Gemini API
+index.html, styles.css, data.js, app.js  ->  worker/index.js (secret key)  ->  gemini-3.5-flash-lite
+       |                                                    |
+       +-------- Live Google Sheet (catalogue, JSONP) -------+---- (no CORS on the sheet,
+       +-------- USGS Earthquake API (seismic, JSON, CORS) -------   so it loads via JSONP)
 ```
 
-1. **Frontend** (this repo, root files): a no-build chat UI served from GitHub Pages.
-   It keeps the conversation history in the browser and sends the full thread to
-   the Worker on each message, so the model always sees context.
-2. **Proxy** (`worker/worker.js`): a Cloudflare Worker that holds the Gemini API
-   key as a secret binding (never shipped to the browser), adds CORS, forwards the
-   conversation to Gemini, maps errors, and enforces the free-tier limit of 15
-   requests per minute.
-3. **Live data**: on every request the Worker fetches the Google Sheet as CSV
-   (`gviz/tq?tqx=out:csv`) and, in parallel, the USGS earthquake feed for the
-   Ireland region (past 90 days, magnitude >= 1.0, mapped to the nearest Rockwell
-   region). Both are injected into the model's system instruction. Nothing is
-   copied, cached, or stored. If the sheet is unreachable the chatbot says so
-   instead of answering from stale data; if USGS is unreachable it says it could
-   not check seismic activity and still answers from the catalogue.
+1. **Frontend** (this repo, root files): a no-build chat UI served from GitHub
+   Pages. It keeps the conversation history in the browser, fetches the two live
+   sources (Google Sheet via JSONP, USGS via CORS JSON), builds the persona and
+   system instruction, and sends the full thread to the Worker on each message.
+2. **Proxy** (`worker/index.js`): a minimal Cloudflare Worker that holds the
+   Gemini API key as a secret binding (never shipped to the browser), adds CORS,
+   forwards whatever `contents` and `system_instruction` the client sends to
+   Gemini, maps errors, and enforces the free-tier limit of 15 requests per
+   minute.
+3. **Live data**: fetched in the browser, not cached. The Google Sheet is read
+   through its `gviz/tq?tqx=out:json` JSONP endpoint (the CSV endpoint sends no
+   CORS headers, so JSONP is used instead); the USGS feed covers the Ireland
+   region (past 90 days, magnitude >= 1.0, mapped to the nearest Rockwell
+   region). Both are injected into the model's system instruction, which the
+   Worker passes through untouched. If the sheet is unreachable the chatbot says
+   so instead of answering from stale data; if USGS is unreachable it says it
+   could not check seismic activity and still answers from the catalogue.
 4. **LLM**: Google Gemini via the `:generateContent` endpoint (per the Google AI
    Studio instructions: lightweight model, chat loop, free tier). The model is
    `gemini-3.5-flash-lite`; the original 2.5 Flash in the instructions is no
    longer available to new keys, so the current lightweight free-tier model is used.
-
 
 ## The five custom agents
 
@@ -75,14 +75,15 @@ They read like colleagues on one team: shared values, distinct lanes, no overlap
 
 ```
 agents/                 five custom agent personas
-worker/                 Cloudflare Worker proxy (fetches the live Google Sheet)
-index.html, styles.css, app.js   GitHub Pages frontend (served from the repo root)
+worker/                 thin Cloudflare Worker proxy (worker/index.js + wrangler.toml)
+.github/workflows/      deploy-worker.yml: auto-deploys the Worker on push
+index.html, styles.css, data.js, app.js   GitHub Pages frontend (repo root)
 agent-persona-template.md   the persona scaffold (source)
 five-innovators-spec.md     the five-innovators spec (source)
 ```
 
-The live catalogue is a Google Sheet (single source of truth). The Worker fetches
-it on every request; see `SHEET_URL` in `worker/worker.js` to point it at a
+The live catalogue is a Google Sheet (single source of truth), read from the
+browser on every question; see `SHEET_ID` in `data.js` to point it at a
 different sheet.
 
 ## Running it yourself
@@ -90,11 +91,14 @@ different sheet.
 The worker requires a Gemini API key from https://aistudio.google.com (free tier):
 
 ```bash
-# deploy the worker
-npx wrangler deploy worker/worker.js --name rockwell-api
-# set the key as a secret binding
-npx wrangler secret put GEMINI_API_KEY --name rockwell-api
+cd worker
+npx wrangler deploy
+npx wrangler secret put GEMINI_API_KEY
 ```
+
+The GitHub Actions workflow (`.github/workflows/deploy-worker.yml`) deploys the
+worker automatically on every push to `worker/**`, provided the repo has a
+`CLOUDFLARE_API_TOKEN` secret set.
 
 The frontend is plain static files served from the repo root; open `index.html`
 locally or serve from any static host. Set `WORKER_URL` in `app.js` to your
